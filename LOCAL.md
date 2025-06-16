@@ -102,7 +102,7 @@ cd /src
 RAILS_ENV=development bundle exec rails c
 
 u = User.find(1)
-u.password = "NewSecurePass1234!"  # Make it long enough for Discourse rules
+u.password = "xcxx"  # Make it long enough for Discourse rules
 u.active = true
 u.approved = true
 u.save!(validate: false)
