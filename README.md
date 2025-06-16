@@ -1,6 +1,6 @@
-# Discourse Segment.io Plugin
+# Discourse Segment CDP Plugin
 
-Emits Discourse user and activity events to Segment.io using the official `analytics-ruby` SDK.
+Emits Discourse user and activity events to Segment CDP using the official `analytics-ruby` SDK.
 
 ### Currently Supported Events
 
@@ -10,16 +10,16 @@ Emits Discourse user and activity events to Segment.io using the official `analy
 - `track("Post Liked")`
 - `track("Topic Created")`
 - `track("Topic Tag Created")`
-- `page` — on controller/page-level requests
+- `page` — on controller/page-level requests with friendly page names
 
-### Identity Strategy (New)
+### Identity Strategy
 
-You can now choose how Segment identifies users via the new `segment_io_user_id_source` site setting:
+You can choose how Segment identifies users via the `segment_cdp_user_id_source` site setting:
 
 | Option             | Description                                                         |
 |--------------------|---------------------------------------------------------------------|
 | `email`            | Uses user email as the `userId`                                     |
-| `sso_external_id`  | Uses the user’s external ID from SSO if present                     |
+| `sso_external_id`  | Uses the user's external ID from SSO if present                     |
 | `use_anon`         | Uses a custom, deterministic, 36-character `anonymousId`            |
 | `discourse_id`     | Uses the internal Discourse user ID (e.g. `123`)                    |
 
@@ -30,9 +30,19 @@ The `anonymousId` format is:
 
 This is stable, unique per user, and does not require identifying information like email.
 
+### Page Tracking
+
+The plugin now uses friendly page names for better readability in Segment. Examples include:
+- "Latest Topics" instead of "list#latest"
+- "Topic View" instead of "topics#show"
+- "User Profile" instead of "users#show"
+- "Admin Dashboard" instead of "admin#index"
+
+All technical information (controller, action) is still preserved in the properties for debugging.
+
 ### 🧪 Debug Logging
 
-Enable `segment_io_debug_enabled` in site settings to log payloads to the Rails log. This is useful for inspecting or verifying the format of data being sent to Segment.
+Enable `segment_cdp_debug_enabled` in site settings to log payloads to the Rails log. This is useful for inspecting or verifying the format of data being sent to Segment.
 
 ### 🔁 Backfilling Existing Users
 
@@ -47,10 +57,13 @@ end
 **Note:**
 If your site previously used `discourse_id`, and you are switching to `use_anon`, Segment will treat these as **new distinct profiles** unless you use Unify rules to merge.
 
-
 ### Installation
 
-Watch Tutorial Video: https://youtu.be/AKR3ki9Kj38
+1. Install the plugin in your Discourse instance
+2. Go to Settings > Plugins > Segment CDP
+3. Add your Segment write key
+4. Enable the plugin
+
 In Segment, create a `Ruby` source and use your write key to configure this plugin in Discourse.
 
 ### Contributing

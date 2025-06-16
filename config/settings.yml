@@ -1,21 +1,21 @@
 plugins:
-  segment_io_enabled:
+  segment_cdp_enabled:
     default: false
     client: false
 
-  segment_io_write_key:
+  segment_cdp_write_key:
     default: ''
     client: false
 
-  segment_io_internal_domain:
+  segment_cdp_internal_domain:
     default: ''
     client: false
 
-  segment_io_debug_enabled:
+  segment_cdp_debug_enabled:
     default: false
     client: false
 
-  segment_io_user_id_source:
+  segment_cdp_user_id_source:
     default: 'email'
     client: false
     type: enum

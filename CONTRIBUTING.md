@@ -6,7 +6,7 @@ We welcome contributions from everyone. By participating in this project, you ag
 
 1. **Fork the repository** and clone it locally:
    ```
-   git clone git@github.com:your-username/discourse-segment-io-plugin.git
+   git clone git@github.com:your-username/discourse-segment-cdp.git
    ```
 
 2. **Create a branch** for your changes:
@@ -22,7 +22,28 @@ We welcome contributions from everyone. By participating in this project, you ag
    Refer to [this guide](http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html) for good commit message practices.
 
 6. **Push to your fork** and submit a pull request:
-   [Submit PR](https://github.com/kylewelsby/discourse-segment-io-plugin/compare/)
+   [Submit PR](https://github.com/kylewelsby/discourse-segment-cdp/compare/)
+
+## Development Guidelines
+
+### Plugin Structure
+- Keep plugin disabled by default
+- Ensure settings are properly initialized
+- Use friendly names for page tracking
+- Handle errors gracefully
+- Add appropriate logging
+
+### Testing
+- Test with missing write key
+- Test with various user ID strategies
+- Test page tracking with different controllers
+- Test error conditions
+
+### Documentation
+- Update README.md with new features
+- Add entries to CHANGELOG.md
+- Document any new settings
+- Include examples where helpful
 
 ## Tips for a Smooth Review
 
@@ -32,4 +53,4 @@ We welcome contributions from everyone. By participating in this project, you ag
 - If adding new configuration settings, update the `README.md` and `settings.yml` accordingly.
 - If the plugin behavior changes, update `CHANGELOG.md`.
 
-Thank you for helping improve the Discourse Segment.io Plugin.
+Thank you for helping improve the Discourse Segment CDP Plugin.

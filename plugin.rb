@@ -1,8 +1,11 @@
-# name: Segment.io
-# about: Import your Discourse data to your Segment.io warehouse
+# frozen_string_literal: true
+# name: discourse-segment-cdp
+# display_name: Segment CDP Plugin
+# about: Smartly send Discourse customer activity data to your Segment CDP workspace
 # version: 2.0.0
 # authors: Kyle Welsby (Original), updated by Donnie W
-enabled_site_setting :segment_io_enabled
+
+enabled_site_setting :segment_cdp_enabled
 
 gem 'analytics-ruby', '2.2.8'
 
@@ -65,7 +68,7 @@ after_initialize do
       end
 
       # Use the configured strategy for identifying logged-in users
-      setting = SiteSetting.segment_io_user_id_source
+      setting = SiteSetting.segment_cdp_user_id_source
 
       case setting
       when 'email'
@@ -74,7 +77,7 @@ after_initialize do
         if normalized.present?
           return { user_id: normalized }
         else
-          Rails.logger.warn "[Segment.io Plugin] 'email' selected but missing for user #{user.id}"
+          Rails.logger.warn "[Segment CDP Plugin] 'email' selected but missing for user #{user.id}"
         end
       when 'sso_external_id'
         # Use SSO external ID if available
@@ -83,23 +86,23 @@ after_initialize do
           if sso.present?
             return { user_id: sso }
           else
-            Rails.logger.warn "[Segment.io Plugin] 'sso_external_id' selected but missing for user #{user.id}, falling back to email"
+            Rails.logger.warn "[Segment CDP Plugin] 'sso_external_id' selected but missing for user #{user.id}, falling back to email"
             # Fallback to email if SSO external ID is not available
             normalized = normalize_email(user.email)
             if normalized.present?
               return { user_id: normalized }
             else
-              Rails.logger.warn "[Segment.io Plugin] Email also missing for user #{user.id}, using anonymous fallback"
+              Rails.logger.warn "[Segment CDP Plugin] Email also missing for user #{user.id}, using anonymous fallback"
             end
           end
         rescue NoMethodError => e
-          Rails.logger.error "[Segment.io Plugin] SSO external_id method error for user #{user.id}: #{e.message}, falling back to email"
+          Rails.logger.error "[Segment CDP Plugin] SSO external_id method error for user #{user.id}: #{e.message}, falling back to email"
           # Fallback to email if SSO method doesn't exist
           normalized = normalize_email(user.email)
           if normalized.present?
             return { user_id: normalized }
           else
-            Rails.logger.warn "[Segment.io Plugin] Email also missing for user #{user.id}, using anonymous fallback"
+            Rails.logger.warn "[Segment CDP Plugin] Email also missing for user #{user.id}, using anonymous fallback"
           end
         end
       when 'use_anon'
@@ -111,13 +114,13 @@ after_initialize do
         return { user_id: user.id.to_s }
       else
         # Unknown config value
-        Rails.logger.warn "[Segment.io Plugin] Unknown user_id_source: '#{setting}' for user #{user.id}"
+        Rails.logger.warn "[Segment CDP Plugin] Unknown user_id_source: '#{setting}' for user #{user.id}"
       end
 
       # Fallback: try to generate anon ID, else return safe random
       # This is reached if the chosen strategy for an authenticated user didn't return an ID (e.g., email missing).
       fallback = generate_user_custom_anonymous_id(user) || begin
-        Rails.logger.error "[Segment.io Plugin] Failed to generate custom anonymous_id for user #{user&.id}, using emergency fallback."
+        Rails.logger.error "[Segment CDP Plugin] Failed to generate custom anonymous_id for user #{user&.id}, using emergency fallback."
         "err_ua_#{SecureRandom.alphanumeric(29).downcase}" # Ensures a 36-char ID
       end
       { anonymous_id: fallback }
@@ -141,11 +144,11 @@ after_initialize do
 
     # Singleton Segment client (thread-safe)
     def self.client
-      return nil unless SiteSetting.segment_io_enabled? && SiteSetting.segment_io_write_key.present?
+      return nil unless SiteSetting.segment_cdp_enabled? && SiteSetting.segment_cdp_write_key.present?
       @client_mutex.synchronize do
         @client ||= Segment::Analytics.new(
-          write_key: SiteSetting.segment_io_write_key,
-          on_error: proc { |status, msg| Rails.logger.error "[Segment.io Plugin] Segment error #{status}: #{msg}" }
+          write_key: SiteSetting.segment_cdp_write_key,
+          on_error: proc { |status, msg| Rails.logger.error "[Segment CDP Plugin] Segment error #{status}: #{msg}" }
         )
       end
     end
@@ -155,7 +158,7 @@ after_initialize do
       if (segment_client = client) && segment_client.respond_to?(method)
         segment_client.public_send(method, *args, &block)
       else
-        Rails.logger.warn "[Segment.io Plugin] Analytics client does not respond to unknown method: #{method}"
+        Rails.logger.warn "[Segment CDP Plugin] Analytics client does not respond to unknown method: #{method}"
         super
       end
     end
@@ -169,7 +172,7 @@ after_initialize do
     class EmitSegmentUserIdentify < ::Jobs::Base
       # Job enqueued after user signup to trigger identify
       def execute(args)
-        return unless SiteSetting.segment_io_enabled?
+        return unless SiteSetting.segment_cdp_enabled?
         user = User.find_by_id(args[:user_id])
         user&.perform_segment_user_identify
       end
@@ -178,15 +181,15 @@ after_initialize do
 
   # Hook into user login events - FIXED: Send identify immediately AND enqueue job
   DiscourseEvent.on(:user_logged_in) do |user|
-    Rails.logger.info "[Segment.io Plugin] User logged in: #{user.id} - #{user.email}"
-    next unless SiteSetting.segment_io_enabled?
+    Rails.logger.info "[Segment CDP Plugin] User logged in: #{user.id} - #{user.email}"
+    next unless SiteSetting.segment_cdp_enabled?
     
     # Send identify immediately on login (don't wait for background job)
-    Rails.logger.info "[Segment.io Plugin] Sending immediate identify for user #{user.id}"
+    Rails.logger.info "[Segment CDP Plugin] Sending immediate identify for user #{user.id}"
     user.perform_segment_user_identify
     
     # Also enqueue background job as backup
-    Rails.logger.info "[Segment.io Plugin] Enqueuing identify job for user #{user.id}"
+    Rails.logger.info "[Segment CDP Plugin] Enqueuing identify job for user #{user.id}"
     user.enqueue_segment_identify_job
   end
 
@@ -202,20 +205,20 @@ after_initialize do
     end
 
     def perform_segment_user_identify # Method called by the background job
-      return unless SiteSetting.segment_io_enabled?
-      Rails.logger.info "[Segment.io Plugin] Performing identify for user #{self.id}"
+      return unless SiteSetting.segment_cdp_enabled?
+      Rails.logger.info "[Segment CDP Plugin] Performing identify for user #{self.id}"
       identifiers = ::DiscourseSegmentIdStrategy.get_segment_identifiers(self)
       return if identifiers.empty?
 
       # Compose payload with traits (IP not available in background job context)
       payload = identifiers.merge(traits: ::DiscourseSegmentIdStrategy.get_user_traits(self))
-      Rails.logger.info "[Segment.io Plugin] Sending identify with payload: #{payload.inspect}"
+      Rails.logger.info "[Segment CDP Plugin] Sending identify with payload: #{payload.inspect}"
 
       ::Analytics.identify(payload)
     end
 
     def emit_segment_user_created
-      return unless SiteSetting.segment_io_enabled?
+      return unless SiteSetting.segment_cdp_enabled?
       identifiers = ::DiscourseSegmentIdStrategy.get_segment_identifiers(self)
       return if identifiers.empty?
 
@@ -224,9 +227,9 @@ after_initialize do
 
     def internal_user?
       # Used for marking internal users by email domain
-      return false if SiteSetting.segment_io_internal_domain.blank?
+      return false if SiteSetting.segment_cdp_internal_domain.blank?
       normalized = ::DiscourseSegmentIdStrategy.normalize_email(email)
-      domain = SiteSetting.segment_io_internal_domain.to_s.strip.downcase
+      domain = SiteSetting.segment_cdp_internal_domain.to_s.strip.downcase
       normalized.present? && normalized.end_with?(domain)
     end
 
@@ -239,28 +242,78 @@ after_initialize do
   class ::ApplicationController
     before_action :emit_segment_user_tracker
 
-    SEGMENT_IO_EXCLUDES = {
+    SEGMENT_CDP_EXCLUDES = {
       'stylesheets' => :all,
       'user_avatars' => :all,
       'about' => ['live_post_counts'],
       'topics' => ['timings']
     }.freeze
 
+    # Map controller/action combinations to friendly page names
+    SEGMENT_PAGE_NAMES = {
+      'list' => {
+        'latest' => 'Latest Topics',
+        'top' => 'Top Topics',
+        'new' => 'New Topics',
+        'unread' => 'Unread Topics',
+        'categories' => 'Categories'
+      },
+      'topics' => {
+        'show' => 'Topic View',
+        'by_external_id' => 'Topic by External ID'
+      },
+      'categories' => {
+        'show' => 'Category View',
+        'index' => 'Categories List'
+      },
+      'users' => {
+        'show' => 'User Profile',
+        'preferences' => 'User Preferences',
+        'account_created' => 'Account Created'
+      },
+      'session' => {
+        'sso' => 'SSO Login',
+        'sso_provider' => 'SSO Provider'
+      },
+      'search' => {
+        'show' => 'Search Results'
+      },
+      'tags' => {
+        'show' => 'Tag View',
+        'index' => 'Tags List'
+      },
+      'groups' => {
+        'show' => 'Group View',
+        'index' => 'Groups List'
+      },
+      'admin' => {
+        'index' => 'Admin Dashboard',
+        'plugins' => 'Admin Plugins',
+        'site_settings' => 'Admin Settings'
+      }
+    }.freeze
+
     def emit_segment_user_tracker
-      return unless SiteSetting.segment_io_enabled?
+      return unless SiteSetting.segment_cdp_enabled?
       return if segment_common_controller_actions?
 
       identifiers = ::DiscourseSegmentIdStrategy.get_segment_identifiers(current_user, session)
       return if identifiers.empty?
 
+      # Get friendly page name or fallback to controller#action
+      page_name = SEGMENT_PAGE_NAMES.dig(controller_name, action_name) || 
+                 "#{controller_name.titleize} #{action_name.titleize}"
+
       # Track full-page view for guests and users
       payload = identifiers.merge(
-        name: "#{controller_name}##{action_name}",
+        name: page_name,
         properties: {
           url: request.original_url,
           path: request.path,
           referrer: request.referrer,
-          title: view_context.try(:page_title) || "#{controller_name}##{action_name}"
+          title: view_context.try(:page_title) || page_name,
+          controller: controller_name,
+          action: action_name
         },
         context: {
           ip: request.ip,
@@ -278,8 +331,8 @@ after_initialize do
 
     # Ignore noisy or useless page routes
     def segment_common_controller_actions?
-      SEGMENT_IO_EXCLUDES[controller_name] == :all ||
-        SEGMENT_IO_EXCLUDES[controller_name]&.include?(action_name)
+      SEGMENT_CDP_EXCLUDES[controller_name] == :all ||
+        SEGMENT_CDP_EXCLUDES[controller_name]&.include?(action_name)
     end
   end
 
@@ -287,7 +340,7 @@ after_initialize do
     after_create :emit_segment_post_created
 
     def emit_segment_post_created
-      return unless SiteSetting.segment_io_enabled?
+      return unless SiteSetting.segment_cdp_enabled?
       author = user
       return unless author
 
@@ -318,7 +371,7 @@ after_initialize do
     after_create :emit_segment_topic_created
 
     def emit_segment_topic_created
-      return unless SiteSetting.segment_io_enabled?
+      return unless SiteSetting.segment_cdp_enabled?
       author = user
       return unless author
 
@@ -349,7 +402,7 @@ after_initialize do
     after_create :emit_segment_topic_tagged
 
     def emit_segment_topic_tagged
-      return unless SiteSetting.segment_io_enabled?
+      return unless SiteSetting.segment_cdp_enabled?
       # Uses fallback guest_id since no user context
       identifiers = ::DiscourseSegmentIdStrategy.get_segment_identifiers(nil)
       return if identifiers.empty?
@@ -373,7 +426,7 @@ after_initialize do
     after_create :emit_segment_post_liked, if: -> { action_type == UserAction::LIKE }
 
     def emit_segment_post_liked
-      return unless SiteSetting.segment_io_enabled?
+      return unless SiteSetting.segment_cdp_enabled?
       actor = user
       return unless actor
 

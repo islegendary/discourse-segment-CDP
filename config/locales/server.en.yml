@@ -1,5 +1,7 @@
 en:
   site_settings:
-    segment_io_enabled: "Is Segment IO enabled?"
-    segment_io_write_key: 'What is the segment io write key?'
-    segment_io_internal_domain: 'What is the domain used to match internal users?'
+    segment_cdp_enabled: "Check to enable Segment CDP"
+    segment_cdp_write_key: 'Add your Segment CDP write key'
+    segment_cdp_internal_domain: 'Add your domain used to match internal users'
+    segment_cdp_user_id_source: 'Select the User ID strategy to use'
+    segment_cdp_debug_enabled: 'Check to enable debugging (optional for debugging only)'
