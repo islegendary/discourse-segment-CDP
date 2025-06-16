@@ -106,3 +106,5 @@ u.password = "NewSecurePass1234!"  # Make it long enough for Discourse rules
 u.active = true
 u.approved = true
 u.save!(validate: false)
+
+docker restart discourse_dev

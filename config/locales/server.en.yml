@@ -1,7 +1,7 @@
 en:
   site_settings:
-    segment_cdp_enabled: "Check to enable Segment CDP"
-    segment_cdp_write_key: 'Add your Segment CDP write key'
-    segment_cdp_internal_domain: 'Add your domain used to match internal users'
-    segment_cdp_user_id_source: 'Select the User ID strategy to use'
-    segment_cdp_debug_enabled: 'Check to enable debugging (optional for debugging only)'
+    segment_CDP_enabled: "Check to enable Segment CDP"
+    segment_CDP_writeKey: 'Add your Segment CDP writeKey'
+    segment_CDP_internal_domain: 'Add your domain used to match internal users'
+    segment_CDP_user_id_source: 'Select the User ID strategy to use'
+    segment_CDP_debug_enabled: 'Check to enable debugging (optional for debugging only)'

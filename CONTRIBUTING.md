@@ -6,7 +6,7 @@ We welcome contributions from everyone. By participating in this project, you ag
 
 1. **Fork the repository** and clone it locally:
    ```
-   git clone git@github.com:your-username/discourse-segment-cdp.git
+   git clone git@github.com:your-username/discourse-segment-CDP.git
    ```
 
 2. **Create a branch** for your changes:
@@ -22,7 +22,7 @@ We welcome contributions from everyone. By participating in this project, you ag
    Refer to [this guide](http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html) for good commit message practices.
 
 6. **Push to your fork** and submit a pull request:
-   [Submit PR](https://github.com/kylewelsby/discourse-segment-cdp/compare/)
+   [Submit PR](https://github.com/wallardonnie/discourse-segment-CDP/compare/)
 
 ## Development Guidelines
 
@@ -32,12 +32,15 @@ We welcome contributions from everyone. By participating in this project, you ag
 - Use friendly names for page tracking
 - Handle errors gracefully
 - Add appropriate logging
+- Follow Segment's latest specifications for context objects
 
 ### Testing
-- Test with missing write key
+- Test with missing writeKey
 - Test with various user ID strategies
 - Test page tracking with different controllers
 - Test error conditions
+- Verify context object structure matches Segment spec
+- Check for duplicate event calls
 
 ### Documentation
 - Update README.md with new features
@@ -52,5 +55,6 @@ We welcome contributions from everyone. By participating in this project, you ag
 - Be open to feedback. We aim to respond to PRs within 1–3 business days.
 - If adding new configuration settings, update the `README.md` and `settings.yml` accordingly.
 - If the plugin behavior changes, update `CHANGELOG.md`.
+- Ensure all Segment event calls follow the latest specifications.
 
 Thank you for helping improve the Discourse Segment CDP Plugin.

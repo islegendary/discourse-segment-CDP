@@ -12,9 +12,49 @@ Emits Discourse user and activity events to Segment CDP using the official `anal
 - `track("Topic Tag Created")`
 - `page` — on controller/page-level requests with friendly page names
 
+### Installation
+
+> **Note**: The following installation instructions are examples for a standard Discourse installation. Different hosting providers may have different installation methods. For detailed installation instructions, please refer to the [official Discourse plugin installation guide](https://meta.discourse.org/t/install-plugins-on-a-self-hosted-site/19157).
+
+#### New Installation
+If you've never used a Segment plugin before:
+
+1. Add the plugin to your Discourse's `app.yml`:
+   ```yaml
+   hooks:
+     after_code:
+       - exec:
+           cd: $home/plugins
+           cmd:
+             - mkdir -p plugins
+             - git clone https://github.com/wallardonnie/discourse-segment-CDP.git
+   ```
+
+2. Rebuild your Discourse container:
+   ```bash
+   cd /var/discourse
+   ./launcher rebuild app
+   ```
+
+3. Go to Settings > Plugins > Segment CDP
+4. Add your Segment writeKey and update your settings
+5. Enable the plugin
+
+> **Important**: The plugin requires the `analytics-ruby` gem (the official Segment Ruby SDK). This should be automatically installed during the rebuild process in a standard Discourse installation. If you encounter any issues, you may need to manually add this gem to your Discourse's Gemfile.
+
+#### Upgrading from discourse-segment-io-plugin
+If you're currently using the old `discourse-segment-io-plugin`, first, follow the installation steps above, but **don't enable** the new plugin until you do the following:
+
+1. Go to Settings > Plugins
+2. Disable the old `discourse-segment-io-plugin`
+3. Add your Segment writeKey and update your settings
+4. Now, Enable the new `Segment CDP` plugin
+
+In Segment, create a `Ruby` source and use your write key to configure this plugin in Discourse.
+
 ### Identity Strategy
 
-You can choose how Segment identifies users via the `segment_cdp_user_id_source` site setting:
+You can choose how Segment identifies users via the `segment_CDP_user_id_source` site setting:
 
 | Option             | Description                                                         |
 |--------------------|---------------------------------------------------------------------|
@@ -42,7 +82,7 @@ All technical information (controller, action) is still preserved in the propert
 
 ### 🧪 Debug Logging
 
-Enable `segment_cdp_debug_enabled` in site settings to log payloads to the Rails log. This is useful for inspecting or verifying the format of data being sent to Segment.
+Enable `segment_CDP_debug_enabled` in site settings to log payloads to the Rails log. This is useful for inspecting or verifying the format of data being sent to Segment.
 
 ### 🔁 Backfilling Existing Users
 
@@ -57,19 +97,10 @@ end
 **Note:**
 If your site previously used `discourse_id`, and you are switching to `use_anon`, Segment will treat these as **new distinct profiles** unless you use Unify rules to merge.
 
-### Installation
-
-1. Install the plugin in your Discourse instance
-2. Go to Settings > Plugins > Segment CDP
-3. Add your Segment write key
-4. Enable the plugin
-
-In Segment, create a `Ruby` source and use your write key to configure this plugin in Discourse.
-
 ### Contributing
 
 Please see [CONTRIBUTING.md](/CONTRIBUTING.md).
 
 ### License
 
-This plugin is © 2016 Kyle Welsby. It is free software, licensed under the terms specified in the [LICENSE](/LICENSE) file.
+This plugin is © 2025 Donnie W. It is free software, licensed under the terms specified in the [LICENSE](/LICENSE) file.

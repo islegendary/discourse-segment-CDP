@@ -5,9 +5,9 @@ All notable changes to this plugin will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- `segment_cdp_user_id_source` setting for flexible identity logic (`email`, `sso_external_id`, `discourse_id`, `use_anon`)
+- `segment_CDP_user_id_source` setting for flexible identity logic (`email`, `sso_external_id`, `discourse_id`, `use_anon`)
 - Deterministic 36-character `anonymousId` generator with fallback handling
-- `segment_cdp_debug_enabled` setting for payload logging
+- `segment_CDP_debug_enabled` setting for payload logging
 - Full support for:
   - User identify events
   - Custom anonymousId for non-email tracking
@@ -15,8 +15,8 @@ All notable changes to this plugin will be documented in this file.
 - Safer error handling in background jobs
 - Memoized Segment client for performance
 - Friendly page names for better readability in Segment
-- Graceful handling of missing write key
-- Improved installation flow (write key first, then enable)
+- Graceful handling of missing writeKey
+- Improved installation flow (writeKey first, then enable)
 
 ### Changed
 - Refactored payload generation into `DiscourseSegmentIdStrategy`
@@ -25,11 +25,16 @@ All notable changes to this plugin will be documented in this file.
 - Improved error handling and logging
 - Made plugin start disabled by default
 - Added more context to page tracking properties
+- Updated repository name to use proper CDP capitalization
+- Transferred maintenance to Donnie W
+- Optimized track calls to follow Segment's latest specifications
+- Improved context object handling for all events
 
 ### Deprecated
 - Use of `alias` method discouraged per Segment's latest Unify guidance
 
 ### Fixed
-- NoMethodError when write key is missing
+- NoMethodError when writeKey is missing
 - Plugin initialization order issues
 - Page tracking error handling
+- Duplicate identify calls on user login

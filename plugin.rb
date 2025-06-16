@@ -1,11 +1,11 @@
 # frozen_string_literal: true
-# name: discourse-segment-cdp
+# name: discourse-segment-CDP
 # display_name: Segment CDP Plugin
 # about: Smartly send Discourse customer activity data to your Segment CDP workspace
 # version: 2.0.0
-# authors: Kyle Welsby (Original), updated by Donnie W
+# authors: Updated by Donnie W from the original plugin by Kyle Welsby
 
-enabled_site_setting :segment_cdp_enabled
+# enabled_site_setting :segment_CDP_enabled
 
 gem 'analytics-ruby', '2.2.8'
 
@@ -29,7 +29,7 @@ after_initialize do
 
       prefix = "#{user.id}-dc-" # fixed prefix with user.id
       input = "discourse_custom_anon_v1:#{user.id}:#{Rails.application.secret_key_base}" # salt input with app secret
-
+      
       # OpenSSL::Digest is preloaded in Discourse/Rails environments, no extra 'require' needed
       full_hash = OpenSSL::Digest::SHA256.hexdigest(input) # hashed string stays stable per user
 
@@ -54,6 +54,26 @@ after_initialize do
       payload
     end
 
+    # Generate context object for track calls following Segment spec
+    def self.build_context(request: nil, page_path: nil, page_title: nil, page_url: nil)
+      context = {}
+      
+      # Add page context
+      context[:page] = {
+        path: page_path,
+        referrer: request&.referrer,
+        search: request&.query_string&.presence,
+        title: page_title,
+        url: page_url
+      }
+      
+      # Add request context if available
+      context[:userAgent] = request&.user_agent
+      context[:ip] = request&.ip
+      
+      context
+    end
+
     # Returns the appropriate identifier (user_id or anonymous_id)
     def self.get_segment_identifiers(user, session = nil)
       unless user
@@ -68,7 +88,7 @@ after_initialize do
       end
 
       # Use the configured strategy for identifying logged-in users
-      setting = SiteSetting.segment_cdp_user_id_source
+      setting = SiteSetting.segment_CDP_user_id_source
 
       case setting
       when 'email'
@@ -144,10 +164,10 @@ after_initialize do
 
     # Singleton Segment client (thread-safe)
     def self.client
-      return nil unless SiteSetting.segment_cdp_enabled? && SiteSetting.segment_cdp_write_key.present?
+      return nil unless SiteSetting.segment_CDP_enabled? && SiteSetting.segment_CDP_writeKey.present?
       @client_mutex.synchronize do
         @client ||= Segment::Analytics.new(
-          write_key: SiteSetting.segment_cdp_write_key,
+          write_key: SiteSetting.segment_CDP_writeKey,
           on_error: proc { |status, msg| Rails.logger.error "[Segment CDP Plugin] Segment error #{status}: #{msg}" }
         )
       end
@@ -172,25 +192,21 @@ after_initialize do
     class EmitSegmentUserIdentify < ::Jobs::Base
       # Job enqueued after user signup to trigger identify
       def execute(args)
-        return unless SiteSetting.segment_cdp_enabled?
+        return unless SiteSetting.segment_CDP_enabled?
         user = User.find_by_id(args[:user_id])
         user&.perform_segment_user_identify
       end
     end
   end
 
-  # Hook into user login events - FIXED: Send identify immediately AND enqueue job
+  # Hook into user login events - Send identify immediately on login
   DiscourseEvent.on(:user_logged_in) do |user|
     Rails.logger.info "[Segment CDP Plugin] User logged in: #{user.id} - #{user.email}"
-    next unless SiteSetting.segment_cdp_enabled?
+    next unless SiteSetting.segment_CDP_enabled?
     
-    # Send identify immediately on login (don't wait for background job)
-    Rails.logger.info "[Segment CDP Plugin] Sending immediate identify for user #{user.id}"
+    # Send identify immediately on login
+    Rails.logger.info "[Segment CDP Plugin] Sending identify for user #{user.id}"
     user.perform_segment_user_identify
-    
-    # Also enqueue background job as backup
-    Rails.logger.info "[Segment CDP Plugin] Enqueuing identify job for user #{user.id}"
-    user.enqueue_segment_identify_job
   end
 
   class ::User
@@ -205,7 +221,7 @@ after_initialize do
     end
 
     def perform_segment_user_identify # Method called by the background job
-      return unless SiteSetting.segment_cdp_enabled?
+      return unless SiteSetting.segment_CDP_enabled?
       Rails.logger.info "[Segment CDP Plugin] Performing identify for user #{self.id}"
       identifiers = ::DiscourseSegmentIdStrategy.get_segment_identifiers(self)
       return if identifiers.empty?
@@ -218,18 +234,34 @@ after_initialize do
     end
 
     def emit_segment_user_created
-      return unless SiteSetting.segment_cdp_enabled?
+      return unless SiteSetting.segment_CDP_enabled?
       identifiers = ::DiscourseSegmentIdStrategy.get_segment_identifiers(self)
       return if identifiers.empty?
 
-      ::Analytics.track(identifiers.merge(event: 'Signed Up'))
+      payload = identifiers.merge(
+        event: 'Signed Up',
+        properties: {
+          created_at: created_at.iso8601,
+          internal: internal_user?
+        }.compact,
+        context: ::DiscourseSegmentIdStrategy.build_context(
+          page_path: "/users/#{username}",
+          page_title: "#{name || username} - User Profile",
+          page_url: "#{Discourse.base_url}/u/#{username}"
+        )
+      )
+      
+      # Add email to context.traits if available
+      payload = ::DiscourseSegmentIdStrategy.add_email_to_context(payload, self)
+
+      ::Analytics.track(payload)
     end
 
     def internal_user?
       # Used for marking internal users by email domain
-      return false if SiteSetting.segment_cdp_internal_domain.blank?
+      return false if SiteSetting.segment_CDP_internal_domain.blank?
       normalized = ::DiscourseSegmentIdStrategy.normalize_email(email)
-      domain = SiteSetting.segment_cdp_internal_domain.to_s.strip.downcase
+      domain = SiteSetting.segment_CDP_internal_domain.to_s.strip.downcase
       normalized.present? && normalized.end_with?(domain)
     end
 
@@ -294,7 +326,7 @@ after_initialize do
     }.freeze
 
     def emit_segment_user_tracker
-      return unless SiteSetting.segment_cdp_enabled?
+      return unless SiteSetting.segment_CDP_enabled?
       return if segment_common_controller_actions?
 
       identifiers = ::DiscourseSegmentIdStrategy.get_segment_identifiers(current_user, session)
@@ -340,7 +372,7 @@ after_initialize do
     after_create :emit_segment_post_created
 
     def emit_segment_post_created
-      return unless SiteSetting.segment_cdp_enabled?
+      return unless SiteSetting.segment_CDP_enabled?
       author = user
       return unless author
 
@@ -350,14 +382,20 @@ after_initialize do
       payload = identifiers.merge(
         event: 'Post Created',
         properties: {
-          topic_id: topic_id,
+          created_at: created_at.iso8601,
+          internal: author.internal_user?,
           post_id: id,
           post_number: post_number,
-          created_at: created_at.iso8601,
-          since_topic_created: topic ? (created_at - topic.created_at).to_i : nil,
           reply_to_post_number: reply_to_post_number,
-          internal: author.internal_user?
-        }.compact
+          since_topic_created: topic ? (created_at - topic.created_at).to_i : nil,
+          topic_id: topic_id,
+          url: topic.url
+        }.compact,
+        context: ::DiscourseSegmentIdStrategy.build_context(
+          page_path: topic.relative_url,
+          page_title: topic.title,
+          page_url: topic.url
+        )
       )
       
       # Add email to context.traits if available
@@ -371,7 +409,7 @@ after_initialize do
     after_create :emit_segment_topic_created
 
     def emit_segment_topic_created
-      return unless SiteSetting.segment_cdp_enabled?
+      return unless SiteSetting.segment_CDP_enabled?
       author = user
       return unless author
 
@@ -381,14 +419,19 @@ after_initialize do
       payload = identifiers.merge(
         event: 'Topic Created',
         properties: {
-          topic_id: id,
-          slug: slug,
-          title: title,
-          url: url,
           category_id: category_id,
           created_at: created_at.iso8601,
-          internal: author.internal_user?
-        }.compact
+          internal: author.internal_user?,
+          slug: slug,
+          title: title,
+          topic_id: id,
+          url: url
+        }.compact,
+        context: ::DiscourseSegmentIdStrategy.build_context(
+          page_path: relative_url,
+          page_title: title,
+          page_url: url
+        )
       )
       
       # Add email to context.traits if available
@@ -402,7 +445,7 @@ after_initialize do
     after_create :emit_segment_topic_tagged
 
     def emit_segment_topic_tagged
-      return unless SiteSetting.segment_cdp_enabled?
+      return unless SiteSetting.segment_CDP_enabled?
       # Uses fallback guest_id since no user context
       identifiers = ::DiscourseSegmentIdStrategy.get_segment_identifiers(nil)
       return if identifiers.empty?
@@ -410,9 +453,15 @@ after_initialize do
       payload = identifiers.merge(
         event: 'Topic Tag Created',
         properties: {
+          tag_name: tag&.name,
           topic_id: topic_id,
-          tag_name: tag&.name
-        }.compact
+          url: topic.url
+        }.compact,
+        context: ::DiscourseSegmentIdStrategy.build_context(
+          page_path: topic.relative_url,
+          page_title: topic.title,
+          page_url: topic.url
+        )
       )
       
       # Add email to context.traits if available (no user in this case)
@@ -426,7 +475,7 @@ after_initialize do
     after_create :emit_segment_post_liked, if: -> { action_type == UserAction::LIKE }
 
     def emit_segment_post_liked
-      return unless SiteSetting.segment_cdp_enabled?
+      return unless SiteSetting.segment_CDP_enabled?
       actor = user
       return unless actor
 
@@ -436,11 +485,16 @@ after_initialize do
       payload = identifiers.merge(
         event: 'Post Liked',
         properties: {
-          post_id: target_post_id,
-          topic_id: target_topic_id,
+          internal: actor.internal_user?,
           like_count_on_topic: target_topic&.like_count,
-          internal: actor.internal_user?
-        }.compact
+          post_id: target_post_id,
+          topic_id: target_topic_id
+        }.compact,
+        context: ::DiscourseSegmentIdStrategy.build_context(
+          page_path: target_topic&.relative_url,
+          page_title: target_topic&.title,
+          page_url: target_topic&.url
+        )
       )
       
       # Add email to context.traits if available
