@@ -22,7 +22,7 @@ We welcome contributions from everyone. By participating in this project, you ag
    Refer to [this guide](http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html) for good commit message practices.
 
 6. **Push to your fork** and submit a pull request:
-   [Submit PR](https://github.com/wallardonnie/discourse-segment-CDP/compare/)
+   [Submit PR](https://github.com/islegendary/discourse-segment-CDP/compare/)
 
 ## Development Guidelines
 
