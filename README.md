@@ -16,6 +16,8 @@ Emits Discourse user and activity events to Segment CDP using the official `anal
 
 > **Note**: The following installation instructions are examples for a standard Discourse installation. Different hosting providers may have different installation methods. For detailed installation instructions, please refer to the [official Discourse plugin installation guide](https://meta.discourse.org/t/install-plugins-on-a-self-hosted-site/19157).
 
+In Segment, create a `Ruby` source (or use existing) and use the writeKey to configure this plugin in Discourse.
+
 #### New Installation
 If you've never used a Segment plugin before:
 
@@ -47,10 +49,8 @@ If you're currently using the old `discourse-segment-io-plugin`, first, follow t
 
 1. Go to Settings > Plugins
 2. Disable the old `discourse-segment-io-plugin`
-3. Add your Segment writeKey and update your settings
+3. In the new plugin, add your Segment writeKey and update your settings
 4. Now, Enable the new `Segment CDP` plugin
-
-In Segment, create a `Ruby` source and use your write key to configure this plugin in Discourse.
 
 ### Identity Strategy
 
@@ -80,22 +80,14 @@ The plugin now uses friendly page names for better readability in Segment. Examp
 
 All technical information (controller, action) is still preserved in the properties for debugging.
 
-### 🧪 Debug Logging
+### 🧪 Debug Logging (Optional)
 
 Enable `segment_CDP_debug_enabled` in site settings to log payloads to the Rails log. This is useful for inspecting or verifying the format of data being sent to Segment.
 
 ### 🔁 Backfilling Existing Users
 
-If you'd like to retroactively send `identify` calls for all users using the new strategy:
-
-```ruby
-User.pluck(:id).each do |uid|
-  Jobs.enqueue(:emit_segment_user_identify, user_id: uid)
-end
-```
-
 **Note:**
-If your site previously used `discourse_id`, and you are switching to `use_anon`, Segment will treat these as **new distinct profiles** unless you use Unify rules to merge.
+If your site previously used `discourse_id`, and you are switching to Indentity Strategy, Segment will treat these as **new distinct profiles**.
 
 ### Contributing
 
