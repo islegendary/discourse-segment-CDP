@@ -77,8 +77,19 @@ after_initialize do
     def self.get_segment_identifiers(user, session = nil)
       unless user
         if session
-          # For guests with session: generate once, reuse
-          session[:segment_guest_id] ||= "g#{SecureRandom.alphanumeric(35).downcase}"
+          # For guests with session: preserve existing ID or generate once
+          session[:segment_guest_id] ||= begin
+            # Try to get existing ID from cookies or other storage
+            existing_id = session[:segment_guest_id] || 
+                         session[:segment_anonymous_id] || 
+                         session[:analytics_anonymous_id]
+            
+            if existing_id.present?
+              existing_id
+            else
+              "g#{SecureRandom.alphanumeric(35).downcase}"
+            end
+          end
           return { anonymous_id: session[:segment_guest_id] }
         else
           # No user or session: fallback to thread-safe shared guest ID
@@ -88,13 +99,14 @@ after_initialize do
 
       # Use the configured strategy for identifying logged-in users
       setting = SiteSetting.segment_CDP_user_id_source
+      identifiers = { anonymous_id: session&.dig(:segment_guest_id) }
 
       case setting
       when 'email'
         # Use email as user_id if present
         normalized = normalize_email(user.email)
         if normalized.present?
-          return { user_id: normalized }
+          identifiers[:user_id] = normalized
         else
           Rails.logger.warn "[Segment CDP Plugin] 'email' selected but missing for user #{user.id}"
         end
@@ -103,13 +115,13 @@ after_initialize do
         begin
           sso = user.single_sign_on_record&.external_id || user.external_id
           if sso.present?
-            return { user_id: sso }
+            identifiers[:user_id] = sso
           else
             Rails.logger.warn "[Segment CDP Plugin] 'sso_external_id' selected but missing for user #{user.id}, falling back to email"
             # Fallback to email if SSO external ID is not available
             normalized = normalize_email(user.email)
             if normalized.present?
-              return { user_id: normalized }
+              identifiers[:user_id] = normalized
             else
               Rails.logger.warn "[Segment CDP Plugin] Email also missing for user #{user.id}, using anonymous fallback"
             end
@@ -119,7 +131,7 @@ after_initialize do
           # Fallback to email if SSO method doesn't exist
           normalized = normalize_email(user.email)
           if normalized.present?
-            return { user_id: normalized }
+            identifiers[:user_id] = normalized
           else
             Rails.logger.warn "[Segment CDP Plugin] Email also missing for user #{user.id}, using anonymous fallback"
           end
@@ -130,11 +142,14 @@ after_initialize do
         return { anonymous_id: anon_id } if anon_id # Should always return an ID if user is present
       when 'discourse_id'
         # Use Discourse user.id as string
-        return { user_id: user.id.to_s }
+        identifiers[:user_id] = user.id.to_s
       else
         # Unknown config value
         Rails.logger.warn "[Segment CDP Plugin] Unknown user_id_source: '#{setting}' for user #{user.id}"
       end
+
+      # If we have a user_id, return both identifiers
+      return identifiers if identifiers[:user_id]
 
       # Fallback: try to generate anon ID, else return safe random
       # This is reached if the chosen strategy for an authenticated user didn't return an ID (e.g., email missing).
@@ -387,6 +402,9 @@ after_initialize do
           userAgent: request.user_agent
         }
       )
+
+      # Always include anonymousId from identifiers
+      payload[:anonymousId] = identifiers[:anonymous_id] if identifiers[:anonymous_id]
       
       # Add email to context.traits if available
       payload = ::DiscourseSegmentIdStrategy.add_email_to_context(payload, current_user)
@@ -401,8 +419,24 @@ after_initialize do
       SEGMENT_CDP_EXCLUDES[controller_name] == :all ||
         SEGMENT_CDP_EXCLUDES[controller_name]&.include?(action_name)
     end
-  end
+    
+    def segment_page_title
+      # First check if we have a friendly name for this controller/action
+      if SEGMENT_PAGE_NAMES[controller_name]&.is_a?(Hash)
+        if controller_name == 'static' && action_name == 'show'
+          # Special handling for static pages
+          path = request.path.split('/').last
+          return SEGMENT_PAGE_NAMES[controller_name][action_name][path] if path && SEGMENT_PAGE_NAMES[controller_name][action_name][path]
+        else
+          return SEGMENT_PAGE_NAMES[controller_name][action_name]
+        end
+      end
 
+      # Fallback to the default title if available, otherwise use controller#action
+      respond_to?(:title) && title.present? ? title : nil
+    end
+  end
+  
   class ::Post
     after_create :emit_segment_post_created
 
