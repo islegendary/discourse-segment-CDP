@@ -29,7 +29,7 @@ If you've never used a Segment plugin before:
            cd: $home/plugins
            cmd:
              - mkdir -p plugins
-             - git clone https://github.com/wallardonnie/discourse-segment-CDP.git
+             - git clone https://github.com/islegendary/discourse-segment-CDP.git
    ```
 
 2. Rebuild your Discourse container:
