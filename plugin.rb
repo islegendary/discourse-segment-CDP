@@ -4,7 +4,6 @@
 # about: Smartly send Discourse customer activity data to your Segment CDP workspace
 # version: 2.0.0
 # authors: Updated by Donnie W from the original plugin by Kyle Welsby
-
 # enabled_site_setting :segment_CDP_enabled
 
 gem 'analytics-ruby', '2.2.8'
@@ -150,11 +149,8 @@ after_initialize do
     def self.get_user_traits(user)
       return {} unless user
       {
-        name: user.name,
-        username: user.username,
+        discourse_username: user.username,
         email: (e = normalize_email(user.email); e.presence),
-        created_at: user.created_at.iso8601,
-        internal: user.internal_user? # flag used to segment internal team users
       }.compact
     end
   end
@@ -189,52 +185,54 @@ after_initialize do
   end
 
   module ::Jobs
-    class EmitSegmentUserIdentify < ::Jobs::Base
-      # Job enqueued after user signup to trigger identify
-      def execute(args)
-        return unless SiteSetting.segment_CDP_enabled?
-        user = User.find_by_id(args[:user_id])
-        user&.perform_segment_user_identify
-      end
-    end
+    # Job removed - we only identify on login now
   end
 
   # Hook into user login events - Send identify immediately on login
-  DiscourseEvent.on(:user_logged_in) do |user|
+ DiscourseEvent.on(:user_logged_in) do |user, session|
     Rails.logger.info "[Segment CDP Plugin] User logged in: #{user.id} - #{user.email}"
     next unless SiteSetting.segment_CDP_enabled?
     
     # Send identify immediately on login
     Rails.logger.info "[Segment CDP Plugin] Sending identify for user #{user.id}"
-    user.perform_segment_user_identify
+    user.perform_segment_user_identify(session)
   end
 
   class ::User
-    # Fire both identify and signup events in order
-    after_create do
-      enqueue_segment_identify_job
-      emit_segment_user_created
-    end
-
-    def enqueue_segment_identify_job
-      Jobs.enqueue(:emit_segment_user_identify, user_id: self.id)
-    end
-
-    def perform_segment_user_identify # Method called by the background job
+    def perform_segment_user_identify(session = nil)
       return unless SiteSetting.segment_CDP_enabled?
+      return if system_user?  # Skip tracking for system users
+
       Rails.logger.info "[Segment CDP Plugin] Performing identify for user #{self.id}"
       identifiers = ::DiscourseSegmentIdStrategy.get_segment_identifiers(self)
       return if identifiers.empty?
 
       # Compose payload with traits (IP not available in background job context)
       payload = identifiers.merge(traits: ::DiscourseSegmentIdStrategy.get_user_traits(self))
-      Rails.logger.info "[Segment CDP Plugin] Sending identify with payload: #{payload.inspect}"
+      
+      # Add discourse name and ID to context.traits if available
+      payload[:context] ||= {}
+      payload[:context][:traits] ||= {}
+      context_traits = {}
+      context_traits[:discourse_user_id] = id.to_s if id
+      context_traits[:discourse_name] = name if name.present?
+      payload[:context][:traits].merge!(context_traits) if context_traits.any?
 
+      # Include anonymousId from session if available
+      if session && (anonymous_id = session[:segment_guest_id])
+        payload[:anonymousId] = anonymous_id
+        Rails.logger.info "[Segment CDP Plugin] Including anonymousId from session: #{anonymous_id}"
+      end
+      
+      Rails.logger.info "[Segment CDP Plugin] Sending identify with payload: #{payload.inspect}"
       ::Analytics.identify(payload)
     end
 
-    def emit_segment_user_created
+    def emit_segment_signed_up
       return unless SiteSetting.segment_CDP_enabled?
+      # Only send on first successful login
+      return unless last_seen_at == created_at
+      
       identifiers = ::DiscourseSegmentIdStrategy.get_segment_identifiers(self)
       return if identifiers.empty?
 
@@ -242,7 +240,9 @@ after_initialize do
         event: 'Signed Up',
         properties: {
           created_at: created_at.iso8601,
-          internal: internal_user?
+          internal: internal_user?,
+          discourse_user_id: id.to_s,
+          discourse_name: name
         }.compact,
         context: ::DiscourseSegmentIdStrategy.build_context(
           page_path: "/users/#{username}",
@@ -267,6 +267,12 @@ after_initialize do
 
     private
 
+    def system_user?
+      # Add logic to determine if the user is a system user
+      # For example, check if the username is "discobot" or if the email matches a pattern
+      username == "discobot" || email.include?("discobot")
+    end
+
     # Note: IP address is captured in page view events via ApplicationController
     # Background identify jobs don't have request context for IP tracking
   end
@@ -278,34 +284,58 @@ after_initialize do
       'stylesheets' => :all,
       'user_avatars' => :all,
       'about' => ['live_post_counts'],
-      'topics' => ['timings']
+      'topics' => ['timings'],
+      'session' => ['csrf', 'get_honeypot_value', 'passkey_challenge', 'destroy'],
+      'users' => ['check_username'],
+      'metadata' => ['opensearch', 'manifest'],
+      'static' => ['service_worker_asset'],
+      'presence' => ['get', 'update'],
+      'tags' => ['search'],
+      'reports' => ['bulk'],
+      'extra_locales' => ['show'],
+      'svg_sprite' => ['show']
     }.freeze
 
     # Map controller/action combinations to friendly page names
     SEGMENT_PAGE_NAMES = {
+      'static' => {
+        'enter' => 'Site Welcome',
+        'show' => {
+          'faq.html' => 'FAQ',
+          'guidelines.html' => 'Guidelines',
+          'tos.html' => 'Terms of Service',
+          'privacy.html' => 'Privacy Policy',
+          'signup' => 'Sign Up'
+        }
+      },
       'list' => {
-        'latest' => 'Latest Topics',
-        'top' => 'Top Topics',
-        'new' => 'New Topics',
-        'unread' => 'Unread Topics',
-        'categories' => 'Categories'
+        'latest' => 'Topics Latest',
+        'top' => 'Topics Top',
+        'new' => 'Topics New',
+        'unread' => 'Topics Unread',
+        'categories' => 'Categories List'
+      },
+      'badges' => {
+        'index' => 'Badges List'
       },
       'topics' => {
         'show' => 'Topic View',
-        'by_external_id' => 'Topic by External ID'
+        'by_external_id' => 'Topic External ID'
       },
       'categories' => {
         'show' => 'Category View',
-        'index' => 'Categories List'
+        'index' => 'Categories List',
+        'categories_and_latest' => 'Categories Latest'
       },
       'users' => {
         'show' => 'User Profile',
         'preferences' => 'User Preferences',
-        'account_created' => 'Account Created'
+        'account_created' => 'User Created'
       },
       'session' => {
-        'sso' => 'SSO Login',
-        'sso_provider' => 'SSO Provider'
+        'sso' => 'Session SSO',
+        'sso_provider' => 'Session Provider',
+        'create' => 'Logged In'
       },
       'search' => {
         'show' => 'Search Results'
@@ -325,6 +355,7 @@ after_initialize do
       }
     }.freeze
 
+
     def emit_segment_user_tracker
       return unless SiteSetting.segment_CDP_enabled?
       return if segment_common_controller_actions?
@@ -333,8 +364,8 @@ after_initialize do
       return if identifiers.empty?
 
       # Get friendly page name or fallback to controller#action
-      page_name = SEGMENT_PAGE_NAMES.dig(controller_name, action_name) || 
-                 "#{controller_name.titleize} #{action_name.titleize}"
+      page_name = segment_page_title
+      page_name ||= "#{controller_name.titleize} #{action_name.titleize}"
 
       # Track full-page view for guests and users
       payload = identifiers.merge(
@@ -343,7 +374,7 @@ after_initialize do
           url: request.original_url,
           path: request.path,
           referrer: request.referrer,
-          title: view_context.try(:page_title) || page_name,
+          title: segment_page_title,
           controller: controller_name,
           action: action_name
         },
@@ -366,8 +397,75 @@ after_initialize do
       SEGMENT_CDP_EXCLUDES[controller_name] == :all ||
         SEGMENT_CDP_EXCLUDES[controller_name]&.include?(action_name)
     end
-  end
+ 
+    def segment_page_title
+      # First check if we have a friendly name for this controller/action
+      if SEGMENT_PAGE_NAMES[controller_name]&.is_a?(Hash)
+        if controller_name == 'static' && action_name == 'show'
+          # Special handling for static pages
+          path = request.path.split('/').last
+          return SEGMENT_PAGE_NAMES[controller_name][action_name][path] if path && SEGMENT_PAGE_NAMES[controller_name][action_name][path]
+        else
+          return SEGMENT_PAGE_NAMES[controller_name][action_name]
+        end
+      end
 
+      # Fallback to the default title
+      title
+    end
+
+    def segment_page_view
+      return unless SiteSetting.segment_CDP_enabled?
+      return if segment_common_controller_actions?
+
+      # Compose payload with page data
+      properties = {
+        path: request.path,
+        url: request.original_url,
+        title: segment_page_title,
+        created_at: Time.current.iso8601
+      }
+
+      # Only add these if they have values
+      properties[:referrer] = request.referrer if request.referrer.present?
+      properties[:search] = request.query_string if request.query_string.present?
+
+      payload = {
+        event: 'Page Viewed',
+        properties: properties
+      }
+
+      # Add user identification using helper
+      identifiers = ::DiscourseSegmentIdStrategy.get_segment_identifiers(current_user, session)
+      payload.merge!(identifiers) unless identifiers.empty?
+
+      # Add context with IP and user agent
+      context = {
+        page: {
+          path: request.path,
+          title: segment_page_title,
+          url: request.original_url
+        }
+      }
+
+      # Only add these if they have values
+      context[:page][:referrer] = request.referrer if request.referrer.present?
+      context[:page][:search] = request.query_string if request.query_string.present?
+      context[:ip] = request.remote_ip if request.remote_ip.present?
+      context[:userAgent] = request.user_agent if request.user_agent.present?
+
+      payload[:context] = context
+
+      # Add traits to context for logged-in users
+      if current_user
+        payload[:context][:traits] = ::DiscourseSegmentIdStrategy.get_user_traits(current_user)
+      end
+
+      Rails.logger.info "[Segment CDP Plugin] Sending page view with payload: #{payload.inspect}"
+      ::Analytics.track(payload)
+    end
+  end
+  
   class ::Post
     after_create :emit_segment_post_created
 
@@ -503,4 +601,5 @@ after_initialize do
       ::Analytics.track(payload)
     end
   end
+  
 end
