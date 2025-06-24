@@ -1,0 +1,10 @@
+{
+  "name": "discourse-segment-CDP",
+  "about_url": "https://github.com/islegendary/discourse-segment-CDP",
+  "license_url": "https://github.com/islegendary/discourse-segment-CDP/blob/master/LICENSE",
+  "component": true,
+  "assets": {
+  },
+  "color_schemes": {
+  }
+}
