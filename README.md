@@ -96,3 +96,5 @@ Please see [CONTRIBUTING.md](/CONTRIBUTING.md).
 ### License
 
 This plugin is © 2025 Donnie W. It is free software, licensed under the terms specified in the [LICENSE](/LICENSE) file.
+
+**Compatibility:** This component provides the same comprehensive tracking as the [discourse-segment-CDP plugin]([https://github.com/islegendary/discourse-segment-theme-component]) but uses backend server mode tracking instead of frontend javascript tracking.
